@@ -8,6 +8,8 @@ Materi yang diimplementasikan:
 
 """
 
+import numpy as np
+import pyautogui
 import cv2
 import sys
 
@@ -28,6 +30,71 @@ def print_instructions():
     print("4. Tekan 'q' untuk keluar dari program")
     print("=" * 60)
     print("\nMemulai program...\n")
+    
+def apply_fullscreen_blur(camera, face_detector, distance_calc, img_processor):
+    """
+    Menerapkan blur fullscreen hingga jarak mata aman lagi
+    """
+    print("Aktivasi blur seluruh layar karena jarak terlalu dekat!")
+
+    # Buat window fullscreen
+    cv2.namedWindow('Fullscreen Blur', cv2.WND_PROP_FULLSCREEN)
+    cv2.setWindowProperty('Fullscreen Blur', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
+    try:
+        while camera.is_opened():
+            # Ambil screenshot seluruh layar
+            screenshot = pyautogui.screenshot()
+
+            # Konversi ke array numpy
+            screenshot = np.array(screenshot)
+
+            # Konversi dari RGB ke BGR
+            screenshot = cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR)
+
+            # Terapkan Gaussian Blur
+            blurred_screenshot = cv2.GaussianBlur(screenshot, settings.BLUR_KERNEL_SIZE, 0)
+
+            # Tampilkan gambar yang di-blur
+            cv2.imshow('Fullscreen Blur', blurred_screenshot)
+
+            # Baca frame dari kamera untuk periksa jarak
+            success, frame = camera.read_frame()
+            if not success:
+                break
+
+            # Konversi BGR ke RGB untuk MediaPipe
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w, _ = frame.shape
+
+            # Deteksi wajah
+            results = face_detector.detect_face(rgb_frame)
+
+            if results and results.multi_face_landmarks:
+                face_landmarks = results.multi_face_landmarks[0]
+                iris_distance_px, _, _ = face_detector.get_iris_positions(face_landmarks.landmark, w, h)
+
+                if distance_calc.is_calibrated:
+                    distance = distance_calc.calculate_distance(iris_distance_px)
+                    is_safe = distance >= settings.DISTANCE_THRESHOLD
+
+                    if is_safe:
+                        print("Jarak aman, menonaktifkan blur layar.")
+                        break
+
+            # Cek key press untuk exit manual
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                print("Exit manual dari blur layar.")
+                break
+
+    except Exception as e:
+        print(f"Error dalam fullscreen blur: {e}")
+
+    finally:
+        # Tutup window blur
+        cv2.destroyWindow('Fullscreen Blur')
+        print("Blur layar dinonaktifkan.")
+
 
 def main():
     """Fungsi utama aplikasi"""
@@ -104,9 +171,9 @@ def main():
                     is_safe = distance >= settings.DISTANCE_THRESHOLD
                     
                     if not is_safe:
-                        # Aplikasi Gaussian Blur sebagai warning
-                        frame = img_processor.apply_gaussian_blur(frame)
-                        frame = img_processor.add_warning_text(frame, 'TERLALU DEKAT!')
+                        # Aktivasi blur seluruh layar
+                        apply_fullscreen_blur(camera, face_detector, distance_calc, img_processor)
+                        # Setelah blur selesai, lanjutkan loop
                     
                     # Tambahkan informasi jarak ke frame
                     frame = img_processor.add_distance_info(frame, distance, is_safe)
